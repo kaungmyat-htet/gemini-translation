@@ -9,6 +9,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def clean_text(text: str):
+    """Remove newlines and extra spaces from text"""
+    if not text:
+        return text
+
+    # Replace newlines with space
+    text = text.replace('\r', ' ').replace('\n', ' ')
+    return ' '.join(text.split())
+
 def translate(api_key: str, text: str, source: str, target: str) -> str:
     """Translate text from source language into target language"""
     client = genai.Client(api_key=api_key)
@@ -21,6 +30,7 @@ def translate(api_key: str, text: str, source: str, target: str) -> str:
             contents=prompt
         )
         translation = response.text.strip()
+        translation = clean_text(text=translation)
     except Exception as e:
         if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
             print("\nError: Daily quota exceeded (HTTP 429 - RESOURCE_EXHAUSTED).")

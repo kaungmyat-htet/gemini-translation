@@ -26,5 +26,6 @@ source ./env/bin/activate
 pip install -r requirements.txt
 
 # run the script
-python3 gemini-translate --api_key
+# you can also add api-key using --api-key
+python3 gemini-translate.py <input_file> <output_file>
 ```

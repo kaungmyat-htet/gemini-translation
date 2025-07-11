@@ -23,7 +23,7 @@ def translate(api_key: str, text: str, source: str, target: str) -> str:
     client = genai.Client(api_key=api_key)
 
     prompt = f"Translate the following {source} text to {target}:\n\n\"{text}\""
-
+    token_usage = 0
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
@@ -31,6 +31,12 @@ def translate(api_key: str, text: str, source: str, target: str) -> str:
         )
         translation = response.text.strip()
         translation = clean_text(text=translation)
+        if hasattr(response, 'usage_metadata'):
+            token_usage = response.usage_metadata.total_token_count
+        else:
+            token_usage = 0
+            print("Warning: usage_metadata not found in response. Token usage might not be available for this request.")
+
     except Exception as e:
         if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
             print("\nError: Daily quota exceeded (HTTP 429 - RESOURCE_EXHAUSTED).")
@@ -39,9 +45,8 @@ def translate(api_key: str, text: str, source: str, target: str) -> str:
             sys.exit(1)
         else:
             print(f"Error during translation: {e}")
-            return "[Translation Failed]"
-    
-    return translation
+            sys.exit(1)
+    return translation, token_usage
 
 
 def main():
@@ -105,6 +110,7 @@ def main():
     total_rows = len(df)
     processed_count = 0
     skipped_count = 0
+    total_token_usage = 0
 
     for index in range(start, min(end, total_rows)):
         row = df.iloc[index]
@@ -113,10 +119,12 @@ def main():
         if context in translated_ids:
             skipped_count += 1
             continue
-
+        
+        token_usage = 0
         try:
-            translated_context = translate(api_key=api_key, text=context, source=args.source, target=args.target)
+            translated_context, token_usage = translate(api_key=api_key, text=context, source=args.source, target=args.target)
             processed_count += 1
+            total_token_usage += token_usage
         except Exception as e:
             print(f"Error translating row {index}: {e}")
             print(f"Might out of request per day")
@@ -130,7 +138,7 @@ def main():
                     row['ids'],
                     str(translated_context)
                 ])
-            print(f"Row {index+1}/{total_rows} translated and written. (Processed: {processed_count}, Skipped: {skipped_count})")
+            print(f"Row {index+1}/{total_rows} translated and written. Token Usage: {token_usage}. Total Token Usage: {total_token_usage} (Processed: {processed_count}, Skipped: {skipped_count})")
 
         except Exception as e:
             print(f"Error writing row {index}: {e}")

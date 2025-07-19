@@ -22,7 +22,7 @@ def translate(api_key: str, text: str, source: str, target: str) -> str:
     """Translate text from source language into target language"""
     client = genai.Client(api_key=api_key)
 
-    prompt = f"Translate the following {source} text to {target}:\n\n\"{text}\""
+    prompt = f"Translate the following {source} text to {target}. Only provide the translated sentence. Do not include any explanation or breakdown. \n\"{text}\""
     token_usage = 0
     try:
         response = client.models.generate_content(
@@ -54,6 +54,7 @@ def main():
 
     parser.add_argument('input_file', help='Path to input CSV file')
     parser.add_argument('output_file', help='Path to output CSV file')
+    parser.add_argument('--column', help='Column to translate')
     parser.add_argument('--api-key', default=None, help='Gemini API key (optional, will fallback to GEMINI_API_KEY from .env)')
     parser.add_argument('--start', type=int, default=0, help='Start row index (inclusive)')
     parser.add_argument('--end', type=int, default=None, help='End row index (exclusive)')
@@ -66,6 +67,11 @@ def main():
     output_filepath = args.output_file
 
     api_key = args.api_key or os.getenv("GEMINI_API_KEY")
+    translate_col = args.column
+
+    if translate_col is None:
+        print("Error: Please specify the column you want to translate using --column.")
+        sys.exit(1)
 
     if not api_key:
         print("Error: Gemini API key not provided. Use --api-key or set GEMINI_API_KEY in .env file.")
@@ -86,18 +92,18 @@ def main():
     if os.path.exists(output_filepath):
         try:
             translated_df = pd.read_csv(output_filepath)
-            translated_ids = set(translated_df['context'])
+            translated_ids = set(translated_df[translate_col])
             print(f'Found existing output file with {len(translated_ids)}')
         except Exception as e:
             print(f"Error reading existing output file: {e}")
             translated_ids = set()
 
     else:
-        # Create new output file with header
         try:
             with open(output_filepath, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(['context', 'id', 'context_my'])
+                header = list(df.columns) + ['translated']
+                writer.writerow(header)
             translated_ids = set()
             print(f"Created new output file: {output_filepath}")
         except Exception as e:
@@ -114,7 +120,7 @@ def main():
 
     for index in range(start, min(end, total_rows)):
         row = df.iloc[index]
-        context = row['context']
+        context = row[translate_col]
 
         if context in translated_ids:
             skipped_count += 1
@@ -133,11 +139,9 @@ def main():
         try:
             with open(output_filepath, mode='a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow([
-                    row['context'],
-                    row['ids'],
-                    str(translated_context)
-                ])
+                row_values = list(row.values)
+                row_values.append(str(translated_context))
+                writer.writerow(row_values)
             print(f"Row {index+1}/{total_rows} translated and written. Token Usage: {token_usage}. Total Token Usage: {total_token_usage} (Processed: {processed_count}, Skipped: {skipped_count})")
 
         except Exception as e:
